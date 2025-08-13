@@ -97,9 +97,8 @@
     }
 
     function connectSocket() {
-      console.log(window.location.host);
-      
-      socket = io(`wss://${window.location.host}`);
+
+      socket = io("http://localhost:4000");
 
       socket.on("connect", () => console.log("Connected:", socket.id));
 
