@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Quiz App</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center p-6">
+
+  <!-- Role Selector -->
+  <div id="role-select" class="bg-white shadow-md rounded p-4 w-full max-w-md">
+    <h1 class="text-2xl font-bold mb-4 text-center">Choose Role</h1>
+    <button onclick="selectRole('admin')" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded w-full mb-2">Admin</button>
+    <button onclick="selectRole('user')" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded w-full">User</button>
+  </div>
+
+  <!-- Admin UI -->
+  <div id="admin-ui" class="hidden w-full max-w-2xl bg-white shadow-md rounded p-4 mt-6">
+    <h2 class="text-xl font-bold mb-4">Admin Panel</h2>
+    <div class="mb-4">
+      <button onclick="createSession()" class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded">Create Session</button>
+      <p id="session-id" class="mt-2 text-gray-700"></p>
+    </div>
+    <div class="mb-4">
+      <button onclick="startSession()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">Start Session</button>
+      <button onclick="nextQuestion()" class="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded ml-2">Next Question</button>
+      <button onclick="endSession()" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded ml-2">End Session</button>
+    </div>
+    <h3 class="text-lg font-semibold mb-2">Connected Users</h3>
+    <ul id="admin-user-list" class="list-disc pl-6 text-gray-800"></ul>
+  </div>
+
+  <!-- User UI -->
+  <div id="user-ui" class="hidden w-full max-w-2xl bg-white shadow-md rounded p-4 mt-6">
+    <h2 class="text-xl font-bold mb-4">User Panel</h2>
+    <div class="mb-4">
+      <input id="join-session-id" type="text" placeholder="Enter Session ID" class="border rounded px-3 py-2 w-full mb-2" />
+      <input id="user-id" type="text" placeholder="Enter Your Name" class="border rounded px-3 py-2 w-full mb-2" />
+      <button onclick="joinSession()" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded w-full">Join Session</button>
+    </div>
+    <div id="question-box" class="hidden">
+      <h3 id="question-title" class="text-lg font-semibold mb-2"></h3>
+      <div id="options" class="space-y-2"></div>
+    </div>
+    <div id="result" class="mt-4 text-lg font-bold text-blue-600"></div>
+  </div>
+
+  <script>
+    let socket;
+    let role = null;
+    let currentSessionId = null;
+    let currentUserId = null;
+
+    function selectRole(selected) {
+      role = selected;
+      document.getElementById('role-select').classList.add('hidden');
+      if (role === 'admin') {
+        document.getElementById('admin-ui').classList.remove('hidden');
+      } else {
+        document.getElementById('user-ui').classList.remove('hidden');
+      }
+      connectSocket();
+    }
+
+    function connectSocket() {
+      socket = io("http://localhost:4000");
+
+      socket.on("connect", () => {
+        console.log("Connected:", socket.id);
+      });
+
+      socket.on("question", (q) => {
+        if (role === 'user') showQuestion(q);
+      });
+
+      socket.on("answer-result", (data) => {
+        document.getElementById('result').innerText = data.correct
+          ? `✅ Correct! Score: ${data.score}`
+          : `❌ Wrong! Score: ${data.score}`;
+      });
+
+      socket.on("session-ended", (users) => {
+        if (role === 'user') {
+          document.getElementById('question-box').classList.add('hidden');
+          document.getElementById('result').innerHTML = `
+            <h3 class="text-xl font-bold mb-4 text-center">🏆 Final Scores</h3>
+            <div class="overflow-x-auto">
+              <table class="table-auto border-collapse border border-gray-300 w-full text-center">
+                <thead>
+                  <tr class="bg-gray-200">
+                    <th class="border border-gray-300 px-4 py-2">Player</th>
+                    <th class="border border-gray-300 px-4 py-2">Score</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${users.map(u => `
+                    <tr>
+                      <td class="border border-gray-300 px-4 py-2">${u.userId}</td>
+                      <td class="border border-gray-300 px-4 py-2">${u.score}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          `;
+          showToast("🎉 Session Ended! Check final results below.", "green");
+        } else if (role === 'admin') {
+          alert("Session ended! Final scores:\n" + JSON.stringify(users, null, 2));
+        }
+      });
+
+      if (role === 'admin') {
+        socket.on("join-success", ({ userId }) => {
+          const ul = document.getElementById('admin-user-list');
+          const li = document.createElement('li');
+          li.textContent = userId;
+          ul.appendChild(li);
+          showToast(`👤 ${userId} joined the session.`, "blue");
+        });
+      }
+    }
+
+    function createSession() {
+      socket.emit("create-session");
+      socket.on("session-created", ({ sessionId }) => {
+        currentSessionId = sessionId;
+        document.getElementById('session-id').innerText = "Session ID: " + sessionId;
+        showToast(`📢 Session Created! ID: ${sessionId}`, "purple");
+      });
+    }
+
+    function startSession() {
+      socket.emit("start-session", { sessionId: currentSessionId });
+      showToast("🚀 Session Started!", "blue");
+    }
+
+    function nextQuestion() {
+      socket.emit("next-question", { sessionId: currentSessionId });
+      showToast("➡️ Next Question Sent!", "yellow");
+    }
+
+    function endSession() {
+      socket.emit("end-session", { sessionId: currentSessionId });
+    }
+
+    function joinSession() {
+      currentSessionId = document.getElementById('join-session-id').value;
+      currentUserId = document.getElementById('user-id').value;
+      socket.emit("join", { sessionId: currentSessionId, userId: currentUserId });
+
+      socket.on("join-success", () => {
+        document.getElementById('question-box').classList.remove('hidden');
+        showToast(`✅ Joined session ${currentSessionId}`, "green");
+      });
+    }
+
+    function showQuestion(q) {
+      document.getElementById('question-title').innerText = q.title;
+      const optionsDiv = document.getElementById('options');
+      optionsDiv.innerHTML = '';
+      q.options.forEach(opt => {
+        const btn = document.createElement('button');
+        btn.className = "bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded w-full";
+        btn.innerText = opt;
+        btn.onclick = () => {
+          socket.emit("submit-answer", {
+            userId: currentUserId,
+            sessionId: currentSessionId,
+            option: opt
+          });
+        };
+        optionsDiv.appendChild(btn);
+      });
+    }
+
+    function showToast(message, color) {
+      const toast = document.createElement('div');
+      toast.className = `fixed top-4 right-4 bg-${color}-500 text-white px-6 py-3 rounded shadow-lg transition-opacity duration-500 z-50`;
+      toast.textContent = message;
+      document.body.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = "0";
+        setTimeout(() => toast.remove(), 500);
+      }, 3000);
+    }
+  </script>
+</body>
+</html>
