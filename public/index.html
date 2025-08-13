@@ -97,8 +97,9 @@
     }
 
     function connectSocket() {
-      const BackendUrl = "https://quiz-realtime-production.up.railway.app/";
-      socket = io(BackendUrl, { transports: ['websocket'] });
+      const BackendUrl = "https://quiz-realtime-production.up.railway.app"; 
+      socket = io(BackendUrl);
+
 
       socket.on("connect", () => console.log("Connected:", socket.id));
 
