@@ -153,29 +153,65 @@ export function RegisterEvents(io) {
       broadcastToSession(session, "question", question);
     });
 
+    // socket.on("submit-answer", ({ userId, sessionId, option } = {}) => {
+    //   const session = sessions.get(sessionId);
+    //   if (!session) {
+    //     socket.emit("answer-error", "Session Does not exist");
+    //     return;
+    //   }
+    //   const user = session.users.find((u) => u.userId === userId);
+    //   if (!user) {
+    //     socket.emit("answer-error", "User not in session");
+    //     return;
+    //   }
+    //   const question = session.questions[session.currentIndex];
+    //   if (!question) {
+    //     socket.emit("answer-error", "No active question");
+    //     return;
+    //   }
+    //   if (option === question.answer) {
+    //     user.score++;
+    //     socket.emit("answer-result", { correct: true, score: user.score });
+    //   } else {
+    //     socket.emit("answer-result", { correct: false, score: user.score });
+    //   }
+    // });
     socket.on("submit-answer", ({ userId, sessionId, option } = {}) => {
-      const session = sessions.get(sessionId);
-      if (!session) {
-        socket.emit("answer-error", "Session Does not exist");
-        return;
-      }
-      const user = session.users.find((u) => u.userId === userId);
-      if (!user) {
-        socket.emit("answer-error", "User not in session");
-        return;
-      }
-      const question = session.questions[session.currentIndex];
-      if (!question) {
-        socket.emit("answer-error", "No active question");
-        return;
-      }
-      if (option === question.answer) {
-        user.score++;
-        socket.emit("answer-result", { correct: true, score: user.score });
-      } else {
-        socket.emit("answer-result", { correct: false, score: user.score });
-      }
-    });
+  const session = sessions.get(sessionId);
+  if (!session) {
+    socket.emit("answer-error", "Session Does not exist");
+    return;
+  }
+  const user = session.users.find((u) => u.userId === userId);
+  if (!user) {
+    socket.emit("answer-error", "User not in session");
+    return;
+  }
+  const question = session.questions[session.currentIndex];
+  if (!question) {
+    socket.emit("answer-error", "No active question");
+    return;
+  }
+
+  // Update score if correct
+  if (option === question.answer) {
+    user.score++;
+    socket.emit("answer-result", { correct: true, score: user.score });
+  } else {
+    socket.emit("answer-result", { correct: false, score: user.score });
+  }
+
+  // Sort users by score descending for leaderboard
+  const leaderboard = [...session.users].sort((a, b) => b.score - a.score);
+
+  // Broadcast updated leaderboard to all sockets in the session
+  session.sockets.forEach((s) => {
+    try {
+      s.emit("leaderboard-update", leaderboard);
+    } catch (_) {}
+  });
+});
+
 
     socket.on("end-session", ({ sessionId } = {}) => {
       const session = sessions.get(sessionId);

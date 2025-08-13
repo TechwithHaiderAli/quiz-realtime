@@ -30,6 +30,21 @@
     </div>
     <h3 class="text-lg font-semibold mb-2">Connected Users</h3>
     <ul id="admin-user-list" class="list-disc pl-6 text-gray-800"></ul>
+    <div id="admin-leaderboard" class="mt-6 hidden">
+      <h3 class="text-xl font-bold mb-2 text-center">🏆 Leaderboard</h3>
+      <div class="overflow-x-auto">
+        <table class="table-auto border-collapse border border-gray-300 w-full text-center">
+          <thead>
+            <tr class="bg-gray-200">
+              <th class="border border-gray-300 px-4 py-2">Rank</th>
+              <th class="border border-gray-300 px-4 py-2">Player</th>
+              <th class="border border-gray-300 px-4 py-2">Score</th>
+            </tr>
+          </thead>
+          <tbody id="admin-leaderboard-body"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <!-- User UI -->
@@ -45,6 +60,23 @@
       <div id="options" class="space-y-2"></div>
     </div>
     <div id="result" class="mt-4 text-lg font-bold text-blue-600"></div>
+
+    <!-- User Leaderboard -->
+    <div id="leaderboard" class="hidden mt-6">
+      <h3 class="text-xl font-bold mb-2 text-center">🏆 Leaderboard</h3>
+      <div class="overflow-x-auto">
+        <table class="table-auto border-collapse border border-gray-300 w-full text-center">
+          <thead>
+            <tr class="bg-gray-200">
+              <th class="border border-gray-300 px-4 py-2">Rank</th>
+              <th class="border border-gray-300 px-4 py-2">Player</th>
+              <th class="border border-gray-300 px-4 py-2">Score</th>
+            </tr>
+          </thead>
+          <tbody id="leaderboard-body"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -67,9 +99,7 @@
     function connectSocket() {
       socket = io("http://localhost:4000");
 
-      socket.on("connect", () => {
-        console.log("Connected:", socket.id);
-      });
+      socket.on("connect", () => console.log("Connected:", socket.id));
 
       socket.on("question", (q) => {
         if (role === 'user') showQuestion(q);
@@ -81,30 +111,15 @@
           : `❌ Wrong! Score: ${data.score}`;
       });
 
+      socket.on("score-update", (users) => {
+        updateLeaderboard(users);
+        if (role === 'admin') updateAdminLeaderboard(users);
+      });
+
       socket.on("session-ended", (users) => {
         if (role === 'user') {
           document.getElementById('question-box').classList.add('hidden');
-          document.getElementById('result').innerHTML = `
-            <h3 class="text-xl font-bold mb-4 text-center">🏆 Final Scores</h3>
-            <div class="overflow-x-auto">
-              <table class="table-auto border-collapse border border-gray-300 w-full text-center">
-                <thead>
-                  <tr class="bg-gray-200">
-                    <th class="border border-gray-300 px-4 py-2">Player</th>
-                    <th class="border border-gray-300 px-4 py-2">Score</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${users.map(u => `
-                    <tr>
-                      <td class="border border-gray-300 px-4 py-2">${u.userId}</td>
-                      <td class="border border-gray-300 px-4 py-2">${u.score}</td>
-                    </tr>
-                  `).join('')}
-                </tbody>
-              </table>
-            </div>
-          `;
+          updateLeaderboard(users, true);
           showToast("🎉 Session Ended! Check final results below.", "green");
         } else if (role === 'admin') {
           alert("Session ended! Final scores:\n" + JSON.stringify(users, null, 2));
@@ -173,6 +188,39 @@
         };
         optionsDiv.appendChild(btn);
       });
+    }
+
+    function updateLeaderboard(users, final = false) {
+      const leaderboardDiv = document.getElementById('leaderboard');
+      const tbody = document.getElementById('leaderboard-body');
+      leaderboardDiv.classList.remove('hidden');
+
+      // Sort users by score descending
+      users.sort((a, b) => b.score - a.score);
+
+      tbody.innerHTML = users.map((u, idx) => `
+        <tr class="${idx % 2 === 0 ? 'bg-gray-50' : 'bg-white'}">
+          <td class="border border-gray-300 px-4 py-2">${idx + 1}</td>
+          <td class="border border-gray-300 px-4 py-2">${u.userId}</td>
+          <td class="border border-gray-300 px-4 py-2">${u.score}</td>
+        </tr>
+      `).join('');
+    }
+
+    function updateAdminLeaderboard(users) {
+      const leaderboardDiv = document.getElementById('admin-leaderboard');
+      const tbody = document.getElementById('admin-leaderboard-body');
+      leaderboardDiv.classList.remove('hidden');
+
+      users.sort((a, b) => b.score - a.score);
+
+      tbody.innerHTML = users.map((u, idx) => `
+        <tr class="${idx % 2 === 0 ? 'bg-gray-50' : 'bg-white'}">
+          <td class="border border-gray-300 px-4 py-2">${idx + 1}</td>
+          <td class="border border-gray-300 px-4 py-2">${u.userId}</td>
+          <td class="border border-gray-300 px-4 py-2">${u.score}</td>
+        </tr>
+      `).join('');
     }
 
     function showToast(message, color) {
